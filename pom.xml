@@ -58,6 +58,9 @@
 					</descriptorRefs>
 					<finalName>thread-origin-agent-${project.version}</finalName>
 					<appendAssemblyId>false</appendAssemblyId>
+					<archive>
+						<manifestFile>src/main/resources/META-INF/MANIFEST.MF</manifestFile>
+					</archive>
 				</configuration>
 
 				<executions>
