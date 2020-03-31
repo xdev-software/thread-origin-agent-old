@@ -5,9 +5,7 @@ import java.lang.instrument.Instrumentation;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
-import javassist.CtBehavior;
 import javassist.CtClass;
-import javassist.CtField;
 import javassist.CtMethod;
 import javassist.CtNewMethod;
 import javassist.NotFoundException;
@@ -16,12 +14,6 @@ import javassist.expr.MethodCall;
 
 
 /**
- * LoggerAgent add java.util.logging statements to classes at runtime using
- * <a href="http://www.javassist.org/">javassist</a>.
- * 
- * <p>
- * inspired by http://today.java.net/article/2008/04/22/add-logging-class-load-time-java-instrumentation
- * </p>
  */
 public class ThreadOriginLogger implements ClassFileTransformer
 {
@@ -37,8 +29,17 @@ public class ThreadOriginLogger implements ClassFileTransformer
 	/** the jul logging if statement */
 	static final String SYN_IFLOG = "if (_log.isLoggable(java.util.logging.Level.INFO))";
 	
+	// static final String SYN_PRETTY_PRINT_METHOD =
+	// "static java.lang.String _prettyStackTrace(java.lang.StackTraceElement[] elements) { if(elements == null ||
+	// elements.length == 0) return \"there were no elements on the stack\" ; java.lang.StringBuilder sb = new
+	// java.lang.StringBuilder(); for(final java.lang.StackTraceElement e : elements)
+	// sb.append(e).append(java.lang.System.lineSeparator()); return sb.toString(); } ";
+	
 	static final String SYN_PRETTY_PRINT_METHOD =
-		" private static java.lang.String _prettyStackTrace(final java.lang.StackTraceElement[] elements) {  if(elements == null || elements.length == 0)  {  return \"there were no elements on the stack\";  }  final java.lang.StringBuilder sb = new java.lang.StringBuilder();  for(final java.lang.StackTraceElement e : elements)  {  sb.append(e).append(java.lang.System.lineSeparator());  }  return sb.toString();  }";
+		"static java.lang.String _prettyStackTrace(java.lang.StackTraceElement[] elements) {   java.lang.StringBuilder sb = new java.lang.StringBuilder();  return sb.toString(); } ";
+	
+	// static final String SYN_PRETTY_PRINT_METHOD =
+	// "static java.lang.String _prettyStackTrace(java.lang.StackTraceElement payload) { return \"hans\" + payload; }";
 	
 	/**
 	 * add agent
@@ -93,8 +94,17 @@ public class ThreadOriginLogger implements ClassFileTransformer
 					if(classname.equals(Thread.class.getName())
 						&& methodName.equals("start"))
 					{
+						// // ThreadOriginLogger.this.addLoggingInfrastructure(classUnderTransformation);
+						// m.replace(
+						// "{ System.out.println(\"Detected thread starting with id: \" + ((Thread)$0).getId() );
+						// java.lang.StackTraceElement[] elements = java.lang.Thread.currentThread().getStackTrace();
+						// java.lang.StringBuilder sb = new java.lang.StringBuilder(); for(java.lang.StackTraceElement e
+						// : elements) sb.append(e).append(java.lang.System.lineSeparator());
+						// java.lang.System.out.println(sb.toString()); $proceed($$); } ");
+						//
 						m.replace(
-							"{ System.out.println(\"Detected thread starting with id: \" + ((Thread)$0).getId()); $proceed($$); } ");
+							"{ System.out.println(\"Detected thread starting with id: \" + ((Thread)$0).getId() + \" name: \" + ((Thread)$0).getName() ); java.lang.StackTraceElement[] elements = java.lang.Thread.currentThread().getStackTrace(); java.lang.StringBuilder sb = new java.lang.StringBuilder();   for(int i=0; i<elements.length; i++)   sb.append(elements[i]).append(java.lang.System.lineSeparator());   java.lang.System.out.println(sb.toString()); $proceed($$); } ");
+						
 					}
 					else if(classname.equals(Thread.class.getName())
 						&& methodName.equals("join"))
@@ -117,73 +127,30 @@ public class ThreadOriginLogger implements ClassFileTransformer
 		return resultingBytes;
 	}
 	
-	/**
-	 * instrument class with javasisst
-	 */
-	private byte[] doClass(final String name, final Class<?> clazz, byte[] b)
+	private void addLoggingInfrastructure(final CtClass classUnderTransformation)
 	{
-		final ClassPool pool = ClassPool.getDefault();
-		CtClass cl = null;
-		
-		try
+		if(classUnderTransformation.isInterface() == false)
 		{
-			cl = pool.makeClass(new java.io.ByteArrayInputStream(b));
-			
-			if(cl.isInterface() == false)
+			try
 			{
-				
-				final CtField field = CtField.make(SYN_LOGGER, cl);
-				final String getLogger = "java.util.logging.Logger.getLogger("
-					+ name.replace('/', '.')
-					+
-					".class.getName());";
-				cl.addField(field, getLogger);
-				
-				final CtMethod prettyPrint = CtNewMethod.make(SYN_PRETTY_PRINT_METHOD, cl);
-				cl.addMethod(prettyPrint);
-				
-				final CtBehavior[] methods = cl.getDeclaredBehaviors();
-				
-				for(int i = 0; i < methods.length; i++)
+				classUnderTransformation.getDeclaredMethod("_prettyStackTrace");
+			}
+			catch(final NotFoundException e)
+			{
+				System.out.println(e.getMessage() + " <-- so we are adding it");
+				try
 				{
-					
-					if(methods[i].isEmpty() == false)
-					{
-						this.doMethod(methods[i]);
-					}
+					final CtMethod prettyPrint = CtNewMethod.make(SYN_PRETTY_PRINT_METHOD, classUnderTransformation);
+					classUnderTransformation.addMethod(prettyPrint);
 				}
-				
-				b = cl.toBytecode();
+				catch(final CannotCompileException e2)
+				{
+					System.err.println("Could not add _prettyStackTrace method");
+					e2.printStackTrace();
+				}
 			}
-		}
-		catch(final Exception e)
-		{
-			System.err.println("Could not instrument  " + name + ",  exception : " + e.getMessage());
-			e.printStackTrace();
-		}
-		finally
-		{
 			
-			if(cl != null)
-			{
-				cl.detach();
-			}
 		}
-		
-		return b;
-	}
-	
-	/**
-	 * modify code and add log statements before the original method is called
-	 * and after the original method was called
-	 */
-	private void doMethod(final CtBehavior method) throws NotFoundException, CannotCompileException
-	{
-		
-		// TODO dont do this for all methods
-		
-		method.insertBefore(SYN_IFLOG + " _log.info(_prettyStackTrace(Thread.currentThread().getStackTrace()));");
-		
 	}
 	
 }
