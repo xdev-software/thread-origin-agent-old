@@ -11,6 +11,8 @@ import javassist.CtField;
 import javassist.CtMethod;
 import javassist.CtNewMethod;
 import javassist.NotFoundException;
+import javassist.expr.ExprEditor;
+import javassist.expr.MethodCall;
 
 
 /**
@@ -57,19 +59,62 @@ public class ThreadOriginLogger implements ClassFileTransformer
 		final java.security.ProtectionDomain domain,
 		final byte[] bytes)
 	{
-		System.out.println(className);
-		// for(final String include : INCLUDES)
-		// {
-		//
-		// if(className.startsWith(include))
-		// {
-		// return this.doClass(className, clazz, bytes);
-		// }
-		// }
-		//
-		// return this.doClass(className, clazz, bytes);
-		return bytes;
 		
+		byte[] resultingBytes = bytes;
+		try
+		{
+			
+			final ClassPool classPool = ClassPool.getDefault();
+			final CtClass classUnderTransformation = classPool.makeClass(new java.io.ByteArrayInputStream(bytes));
+			
+			if(classUnderTransformation == null)
+			{
+				return resultingBytes;
+			}
+			
+			classUnderTransformation.instrument(new ExprEditor()
+			{
+				
+				@Override
+				public void edit(final MethodCall m) throws CannotCompileException
+				{
+					CtMethod method = null;
+					try
+					{
+						method = m.getMethod();
+					}
+					catch(final NotFoundException e)
+					{
+						System.out.println(e.getMessage());
+						return;
+					}
+					final String classname = method.getDeclaringClass().getName();
+					final String methodName = method.getName();
+					if(classname.equals(Thread.class.getName())
+						&& methodName.equals("start"))
+					{
+						m.replace(
+							"{ System.out.println(\"Detected thread starting with id: \" + ((Thread)$0).getId()); $proceed($$); } ");
+					}
+					else if(classname.equals(Thread.class.getName())
+						&& methodName.equals("join"))
+					{
+						m.replace(
+							"{ System.out.println(\"Detected thread joining with id: \" + ((Thread)$0).getId());  $proceed($$); } ");
+					}
+					
+				}
+			});
+			
+			resultingBytes = classUnderTransformation.toBytecode();
+		}
+		catch(final Exception e)
+		{
+			System.err.println("Could not instrument  " + className + ",  exception : " + e.getMessage());
+			e.printStackTrace();
+		}
+		
+		return resultingBytes;
 	}
 	
 	/**
