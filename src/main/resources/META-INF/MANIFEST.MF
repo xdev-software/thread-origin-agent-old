@@ -1,0 +1,1 @@
+Premain-Class: software.xdev.tools.threadoriginagent.ThreadOriginLogger
