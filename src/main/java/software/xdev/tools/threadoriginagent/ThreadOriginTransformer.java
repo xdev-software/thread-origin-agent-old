@@ -2,10 +2,10 @@ package software.xdev.tools.threadoriginagent;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Executor;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
@@ -17,18 +17,22 @@ import javassist.expr.MethodCall;
 
 
 /**
- * 
+ * This javaagent should ALWAYS be the first!
  */
 public class ThreadOriginTransformer implements ClassFileTransformer
 {
 	private static final String PROCEED = "$proceed($$); ";
 	
-	private static final String PRINT_STACK = "java.lang.StackTraceElement[] elements = java.lang.Thread.currentThread().getStackTrace(); " +
-		"java.lang.StringBuilder sb = new java.lang.StringBuilder(); " +
-		"for(int i=0; i<elements.length; i++) " +
-		"   sb.append(\"\\t\").append(elements[i]).append(java.lang.System.lineSeparator()); " +
-		"java.lang.System.out.println(sb.toString()); ";
-	
+	private static final String PRINT_STACK =
+		"java.lang.StackTraceElement[] elements = java.lang.Thread.currentThread().getStackTrace(); "
+			+
+			"java.lang.StringBuilder sb = new java.lang.StringBuilder(); "
+			+
+			"for(int i=0; i<elements.length; i++) "
+			+
+			"   sb.append(\"\\t\").append(elements[i]).append(java.lang.System.lineSeparator()); "
+			+
+			"java.lang.System.out.println(sb.toString()); ";
 	
 	/**
 	 * Don't log calls to classnames if they start with the string mentioned here<br/>
@@ -49,14 +53,40 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 		
 		System.out.println("Ignoring excluded: " + String.join(",", this.excluded));
 	}
-
+	
 	/**
 	 * add agent
+	 * 
 	 * @see src/main/resources/META-INF/MAINFEST.MF
 	 */
 	public static void premain(final String agentArgument, final Instrumentation instrumentation)
 	{
 		instrumentation.addTransformer(new ThreadOriginTransformer(agentArgument));
+		
+		System.out.println("Trying to retransform loaded classes");
+		long failed = 0;
+		long success = 0;
+		for(final Class<?> loadedClazz : instrumentation.getAllLoadedClasses())
+		{
+			if(loadedClazz.getName().startsWith("software.xdev.tools")
+				|| loadedClazz.getName().startsWith("javassist"))
+			{
+				System.out.println("Ignoring " + loadedClazz.getName());
+				continue;
+			}
+			
+			try
+			{
+				instrumentation.retransformClasses(loadedClazz);
+				success++;
+			}
+			catch(final UnmodifiableClassException e)
+			{
+				failed++;
+			}
+			
+		}
+		System.out.println("Retransform loaded classes; " + success + "x successful, " + failed + "x failed");
 	}
 	
 	/**
@@ -107,7 +137,7 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 					}
 					catch(final NotFoundException e)
 					{
-//						System.out.println("Could not find method '" + m.getSignature() + "':"  + e.getMessage());
+						// System.out.println("Could not find method '" + m.getSignature() + "':" + e.getMessage());
 						return;
 					}
 					
@@ -115,8 +145,6 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 					final String methodName = method.getName();
 					
 					ThreadOriginTransformer.this.replaceThread(classname, m, methodName);
-					ThreadOriginTransformer.this.replaceExecutor(classname, m, methodName);
-					
 				}
 			});
 			
@@ -125,25 +153,32 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 		}
 		catch(final Exception e)
 		{
-			System.out.println("Could not instrument " + className + "/" + clazz.getCanonicalName() + ", exception: " + e.getMessage());
+			System.out.println(
+				"Could not instrument "
+					+ className
+					+ "/"
+					+ clazz.getCanonicalName()
+					+ ", exception: "
+					+ e.getMessage());
 		}
 		
 		return resultingBytes;
 	}
 	
-	void replaceThread(final String classname, final MethodCall m, final String methodName) throws CannotCompileException
+	void replaceThread(final String classname, final MethodCall m, final String methodName)
+		throws CannotCompileException
 	{
 		if(!Thread.class.getName().equals(classname))
 		{
 			return;
 		}
 		
-		
 		if(methodName.equals("start"))
 		{
 			final StringBuilder sb = new StringBuilder();
 			sb.append("{ ");
-			sb.append("System.out.println(\"Detected Thread.start() id: \" + ((Thread)$0).getId() + \" name: \" + ((Thread)$0).getName()); ");
+			sb.append(
+				"System.out.println(\"Detected Thread.start() id: \" + ((Thread)$0).getId() + \" name: \" + ((Thread)$0).getName()); ");
 			sb.append(PRINT_STACK);
 			sb.append(PROCEED);
 			sb.append("} ");
@@ -154,33 +189,13 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 		{
 			final StringBuilder sb = new StringBuilder();
 			sb.append("{ ");
-			sb.append("System.out.println(\"Detected Thread.join() id: \" + ((Thread)$0).getId() + \" name: \" + ((Thread)$0).getName()); ");
+			sb.append(
+				"System.out.println(\"Detected Thread.join() id: \" + ((Thread)$0).getId() + \" name: \" + ((Thread)$0).getName()); ");
 			sb.append(PROCEED);
 			sb.append("} ");
 			
 			m.replace(sb.toString());
 		}
 	}
-	
-	void replaceExecutor(final String classname, final MethodCall m, final String methodName) throws CannotCompileException
-	{
-		if(!Executor.class.getName().equals(classname))
-		{
-			return;
-		}
-		
-		if(methodName.equals("execute"))
-		{
-			final StringBuilder sb = new StringBuilder();
-			sb.append("{ ");
-			sb.append("System.out.println(\"Detected Executor.execute()\"); ");
-			sb.append(PRINT_STACK);
-			sb.append(PROCEED);
-			sb.append("} ");
-			
-			m.replace(sb.toString());
-		}
-	}
-
 	
 }
