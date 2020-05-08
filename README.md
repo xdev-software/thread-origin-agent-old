@@ -12,3 +12,12 @@ This jar you can use directly to add it to the java command line:
 	java -javaagent:thread-origin-agent-1.0.0.jar
 
 This project was inspired by https://github.com/kreyssel/maven-examples
+
+## Usage
+
+* Build the project with Maven: ``mvn clean install``
+  * ``thread-origin-agent-1.0.0.jar`` should be generated in the ``target`` directory
+* Insert ``-javaagent:<pathTothread-origin-agent-1.0.0.jar>=<packagesToIgnore>`` as far forward as possible into the JVM-arguments
+  * Examples:
+    *  ```java -jar <programToInspect>.jar -javaagent:thread-origin-agent-1.0.0.jar``
+	*  ```java -jar <programToInspect>.jar -javaagent:"C:\temp\thread-origin-agent-1.0.0.jar"=sun/awt,sun/java2d``

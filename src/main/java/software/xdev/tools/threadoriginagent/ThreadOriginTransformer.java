@@ -36,7 +36,7 @@ public class ThreadOriginTransformer implements ClassFileTransformer
 	
 	/**
 	 * Don't log calls to classnames if they start with the string mentioned here<br/>
-	 * e.g: -javaagent=thread-origin-agent-1.0.0.jar=sun/awt,sun/java2d
+	 * e.g: -javaagent:thread-origin-agent-1.0.0.jar=sun/awt,sun/java2d
 	 */
 	private final List<String> excluded = new ArrayList<>();
 	
