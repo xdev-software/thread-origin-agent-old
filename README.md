@@ -19,5 +19,5 @@ This project was inspired by https://github.com/kreyssel/maven-examples
   * ``thread-origin-agent-1.0.0.jar`` should be generated in the ``target`` directory
 * Insert ``-javaagent:<pathTothread-origin-agent-1.0.0.jar>=<packagesToIgnore>`` as far forward as possible into the JVM-arguments
   * Examples:
-    *  ```java -jar <programToInspect>.jar -javaagent:thread-origin-agent-1.0.0.jar``
-	*  ```java -jar <programToInspect>.jar -javaagent:"C:\temp\thread-origin-agent-1.0.0.jar"=sun/awt,sun/java2d``
+    *  ``java -jar <programToInspect>.jar -javaagent:thread-origin-agent-1.0.0.jar``
+    *  ``java -jar <programToInspect>.jar -javaagent:"C:\temp\thread-origin-agent-1.0.0.jar"=sun/awt,sun/java2d``
