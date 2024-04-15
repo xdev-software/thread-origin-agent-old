@@ -1,3 +1,6 @@
+> [!WARNING]
+> This repo was migrated to https://github.com/xdev-software/thread-origin-agent
+
 # Thread Origin Agent
 
 In many situations is it helpful to add logging functions to running code to find out which class created a **Thread**. To find out what the origin of a Thread is, we will log the stacktrace at Thread creation.
